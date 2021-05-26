@@ -285,12 +285,16 @@ class AssertThatWrapper:
         return _ensure_init(self._registered)
 
 
+class NoAssertionError:
+    def __bool__(self):
+        return False
+
+
 def _raises_assertion_error(func: Callable, args: Iterable = (), kwargs: Optional[dict] = None)\
-        -> Union[bool, AssertionError]:
-    """ Returns False if no assertion error is raised, else returns the raised AssertionError """
+        -> Union[NoAssertionError, AssertionError]:
     kwargs = {} if kwargs is None else kwargs
     try:
         func(*args, **kwargs)
-        return False
+        return NoAssertionError()
     except AssertionError as failed_assert:
         return failed_assert
