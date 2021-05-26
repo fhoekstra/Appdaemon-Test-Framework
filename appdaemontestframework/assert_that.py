@@ -2,7 +2,8 @@ import textwrap
 from abc import ABC, abstractmethod
 
 
-### Custom Matchers ##################################################
+# Custom Matchers ####################################################
+from typing import Union, Iterable, Callable, Optional
 
 
 class ServiceOnAnyDomain:
@@ -35,7 +36,7 @@ assert 'asdfasdf' == AnyString()
 ######################################################################
 
 
-### Custom Exception #################################################
+# Custom Exception ###################################################
 class EitherOrAssertionError(AssertionError):
     def __init__(self, first_assertion_error, second_assertion_error):
         message = '\n'.join([
@@ -81,15 +82,15 @@ class WasWrapper(Was):
         """ Assert that a given entity_id has been turned on """
         entity_id = self.thing_to_check
 
-        service_not_called = _capture_assert_failure_exception(
-            lambda: self.hass_functions['call_service'].assert_any_call(
-                ServiceOnAnyDomain('turn_on'),
-                **{'entity_id': entity_id, **service_specific_parameters}))
+        service_not_called = _raises_assertion_error(
+            self.hass_functions['call_service'].assert_any_call,
+            args=(ServiceOnAnyDomain('turn_on'),),
+            kwargs={'entity_id': entity_id, **service_specific_parameters})
 
-        turn_on_helper_not_called = _capture_assert_failure_exception(
-            lambda: self.hass_functions['turn_on'].assert_any_call(
-                entity_id,
-                **service_specific_parameters))
+        turn_on_helper_not_called = _raises_assertion_error(
+            self.hass_functions['turn_on'].assert_any_call,
+            args=(entity_id,),
+            kwargs=service_specific_parameters)
 
         if service_not_called and turn_on_helper_not_called:
             raise EitherOrAssertionError(
@@ -99,15 +100,15 @@ class WasWrapper(Was):
         """ Assert that a given entity_id has been turned off """
         entity_id = self.thing_to_check
 
-        service_not_called = _capture_assert_failure_exception(
-            lambda: self.hass_functions['call_service'].assert_any_call(
-                ServiceOnAnyDomain('turn_off'),
-                **{'entity_id': entity_id, **service_specific_parameters}))
+        service_not_called = _raises_assertion_error(
+            self.hass_functions['call_service'].assert_any_call,
+            args=(ServiceOnAnyDomain('turn_off'),),
+            kwargs={'entity_id': entity_id, **service_specific_parameters})
 
-        turn_off_helper_not_called = _capture_assert_failure_exception(
-            lambda: self.hass_functions['turn_off'].assert_any_call(
-                entity_id,
-                **service_specific_parameters))
+        turn_off_helper_not_called = _raises_assertion_error(
+            self.hass_functions['turn_off'].assert_any_call,
+            args=(entity_id,),
+            kwargs=service_specific_parameters)
 
         if service_not_called and turn_off_helper_not_called:
             raise EitherOrAssertionError(
@@ -127,8 +128,8 @@ class WasNotWrapper(Was):
 
     def turned_on(self, **service_specific_parameters):
         """ Assert that a given entity_id has NOT been turned ON w/ the given parameters"""
-        thing_not_turned_on_with_given_params = _capture_assert_failure_exception(
-            lambda: self.was_wrapper.turned_on(**service_specific_parameters))
+        thing_not_turned_on_with_given_params = _raises_assertion_error(
+            self.was_wrapper.turned_on, kwargs=service_specific_parameters)
 
         if not thing_not_turned_on_with_given_params:
             raise AssertionError(
@@ -137,8 +138,8 @@ class WasNotWrapper(Was):
 
     def turned_off(self, **service_specific_parameters):
         """ Assert that a given entity_id has NOT been turned OFF """
-        thing_not_turned_off = _capture_assert_failure_exception(
-            lambda: self.was_wrapper.turned_off(**service_specific_parameters))
+        thing_not_turned_off = _raises_assertion_error(
+            self.was_wrapper.turned_off, kwargs=service_specific_parameters)
 
         if not thing_not_turned_off:
             raise AssertionError(
@@ -147,12 +148,12 @@ class WasNotWrapper(Was):
 
     def called_with(self, **kwargs):
         """ Assert that a given service has NOT been called with the given arguments"""
-        service_not_called = _capture_assert_failure_exception(
-            lambda: self.was_wrapper.called_with(**kwargs))
+        service_not_called = _raises_assertion_error(
+            self.was_wrapper.called_with, kwargs=kwargs)
 
         if not service_not_called:
             raise AssertionError(
-                "Service shoud NOT have been called with the given args: " + str(kwargs))
+                "Service should NOT have been called with the given args: " + str(kwargs))
 
 
 class ListensToWrapper:
@@ -252,7 +253,7 @@ def _ensure_init(property):
 
 class AssertThatWrapper:
     def __init__(self, hass_mocks):
-        # Access the `_hass_functions` through private member for now to avoid genearting deprecation
+        # Access the `_hass_functions` through private member for now to avoid generating deprecation
         # warnings while keeping compatibility.
         self.hass_functions = hass_mocks._hass_functions
         self._was = None
@@ -284,10 +285,12 @@ class AssertThatWrapper:
         return _ensure_init(self._registered)
 
 
-def _capture_assert_failure_exception(function_with_assertion):
-    """ Returns wether the assertion was successful or not. But does not throw """
+def _raises_assertion_error(func: Callable, args: Iterable = (), kwargs: Optional[dict] = None)\
+        -> Union[bool, AssertionError]:
+    """ Returns False if no assertion error is raised, else returns the raised AssertionError """
+    kwargs = {} if kwargs is None else kwargs
     try:
-        function_with_assertion()
-        return None
+        func(*args, **kwargs)
+        return False
     except AssertionError as failed_assert:
         return failed_assert
