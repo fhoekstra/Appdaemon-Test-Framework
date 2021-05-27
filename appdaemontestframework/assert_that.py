@@ -94,7 +94,7 @@ class WasWrapper(Was):
 
         if service_not_called and turn_on_helper_not_called:
             raise EitherOrAssertionError(
-                service_not_called, turn_on_helper_not_called)
+                service_not_called.error, turn_on_helper_not_called.error)
 
     def turned_off(self, **service_specific_parameters):
         """ Assert that a given entity_id has been turned off """
@@ -112,7 +112,7 @@ class WasWrapper(Was):
 
         if service_not_called and turn_off_helper_not_called:
             raise EitherOrAssertionError(
-                service_not_called, turn_off_helper_not_called)
+                service_not_called.error, turn_off_helper_not_called.error)
 
     def called_with(self, **kwargs):
         """ Assert that a given service has been called with the given arguments"""
@@ -285,16 +285,24 @@ class AssertThatWrapper:
         return _ensure_init(self._registered)
 
 
-class NoAssertionError:
+class AssertionErrorRaised:
+    def __init__(self, error: Optional[AssertionError]):
+        self.error = error
+
     def __bool__(self):
-        return False
+        return self.error is not None
+
+
+class NoAssertionErrorRaised(AssertionErrorRaised):
+    def __init__(self):
+        super().__init__(None)
 
 
 def _raises_assertion_error(func: Callable, args: Iterable = (), kwargs: Optional[dict] = None)\
-        -> Union[NoAssertionError, AssertionError]:
+        -> Union[NoAssertionErrorRaised, AssertionErrorRaised]:
     kwargs = {} if kwargs is None else kwargs
     try:
         func(*args, **kwargs)
-        return NoAssertionError()
+        return NoAssertionErrorRaised()
     except AssertionError as failed_assert:
-        return failed_assert
+        return AssertionErrorRaised(failed_assert)
